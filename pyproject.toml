@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "rinha"
+version = "0.1.0"
+description = ""
+authors = ["Ricardo Gomes <desk467@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+starlette = "^0.32.0.post1"
+uvicorn = { extras = ["standard"], version = "^0.24.0.post1" }
+gunicorn = "^21.2.0"
+asyncpg = "^0.29.0"
+
+
+[tool.poetry.group.dev.dependencies]
+pylint = "^3.0.2"
+black = "^23.11.0"
+pytest = "^7.4.3"
+locust = "^2.18.4"
+
+[tool.pylint."MESSAGES CONTROL"]
+disable = '''C0116,
+             C0115,
+             C0114
+'''
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
