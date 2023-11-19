@@ -18,4 +18,9 @@ As seguintes otimizações feitas:
 
 ## Segunda versão
 
-Em desenvolvimento...
+Nesta versão, o objetivo foi implementar a seguinte otimização:
+
+- Ajustar a criação de uma Pessoa de forma bufferizada, acumulando algumas
+  inserções antes de enviar para o banco de dados
+
+[Resultado do teste de carga da primeira versão](https://htmlpreview.github.io/?https://raw.githubusercontent.com/desk467/rinha-backend-23/main/reports/segunda_versao.html)

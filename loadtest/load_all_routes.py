@@ -1,3 +1,4 @@
+import time
 from random import choice, randint, sample
 from datetime import datetime
 from locust import HttpUser, task
@@ -55,7 +56,7 @@ class LoadAllRoutes(HttpUser):
         }
 
         response = self.client.post("/pessoas", json=pessoa)
-
+        time.sleep(1)
         next_req_url = response.headers.get("Location")
         self.client.get(next_req_url, name="/pessoas/[pessoa_id]")
         self.client.get(f"/pessoas?t={choice(langs)}", name="/pessoas?t=[term]")

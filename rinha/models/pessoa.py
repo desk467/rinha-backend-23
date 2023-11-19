@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Self
 from asyncpg import Pool
+from rinha.util import dump_terms
 
 
 def is_valid_date(date_as_str) -> bool:
@@ -18,10 +19,6 @@ def is_valid_stack(stack) -> bool:
     return all(isinstance(item, str) for item in stack)
 
 
-def dump_terms(nome, apelido, stack):
-    return f"{nome}{apelido}{','.join(stack)}"
-
-
 @dataclass
 class Pessoa:
     id: uuid.UUID
@@ -29,6 +26,9 @@ class Pessoa:
     nome: str
     nascimento: datetime
     stack: List[str]
+
+    def __hash__(self) -> int:
+        return self.id.int
 
     @staticmethod
     def build(data: dict) -> Self:

@@ -1,8 +1,10 @@
 from starlette.requests import Request
+from starlette.background import BackgroundTask
 from starlette.responses import Response, JSONResponse
 from starlette.datastructures import Headers
 from starlette.applications import Starlette
 from rinha.models.pessoa import Pessoa
+from rinha.tasks import pessoa_buffer
 
 
 def define_routes(app: Starlette):
@@ -15,10 +17,14 @@ def define_routes(app: Starlette):
 async def create_pessoa(request: Request) -> Response:
     req_data = await request.json()
     new_pessoa = Pessoa.build(req_data)
-    await new_pessoa.save(request.state.pool)
+    pessoa_buffer.add_item(new_pessoa)
+
+    task = BackgroundTask(pessoa_buffer.bulk_insert_task, pool=request.state.pool)
 
     return Response(
-        headers=Headers({"Location": f"/pessoas/{new_pessoa.id}"}), status_code=201
+        headers=Headers({"Location": f"/pessoas/{new_pessoa.id}"}),
+        status_code=201,
+        background=task,
     )
 
 
