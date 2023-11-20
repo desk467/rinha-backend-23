@@ -1,22 +1,43 @@
 import uuid
 import json
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Self
-from asyncpg import Pool
-from rinha.util import dump_terms
+from asyncpg import Pool, Connection
+from rinha.util import is_valid_date, is_valid_stack
 
 
-def is_valid_date(date_as_str) -> bool:
-    try:
-        datetime.strptime(date_as_str, "%Y-%m-%d")
-        return True
-    except ValueError:
-        return False
+cache_pessoas = OrderedDict()
+MAX_ITEMS = 800
 
 
-def is_valid_stack(stack) -> bool:
-    return all(isinstance(item, str) for item in stack)
+async def setup_pessoa_listener(conn: Connection):
+    await conn.add_listener("t_pessoa__insertion", insert_pessoa_callback)
+
+
+async def insert_pessoa_callback(conn, pid, channel, payload):
+    record = json.loads(payload)
+    if not record:
+        return
+
+    cache_pessoas[record["id"]] = record
+
+    if len(cache_pessoas) > MAX_ITEMS:
+        cache_pessoas.popitem()
+
+
+def get_pessoa_from_cache(pessoa_id: str):
+    if pessoa := cache_pessoas.get(pessoa_id):
+        return Pessoa(
+            id=pessoa["id"],
+            apelido=pessoa["apelido"],
+            nome=pessoa["nome"],
+            nascimento=datetime.strptime(pessoa["nascimento"], "%Y-%m-%d"),
+            stack=pessoa["stack"],
+        )
+
+    return None
 
 
 @dataclass
@@ -53,22 +74,6 @@ class Pessoa:
         )
 
     @staticmethod
-    async def generate_table(pool: Pool):
-        async with pool.acquire() as connection:
-            await connection.execute(
-                """
-                    CREATE TABLE IF NOT EXISTS t_pessoa (
-                        id uuid PRIMARY KEY,
-                        nome varchar(120) NOT NULL,
-                        apelido varchar(50) NOT NULL,
-                        nascimento date NOT NULL,
-                        stack jsonb NOT NULL,
-                        termos text
-                    )
-                """
-            )
-
-    @staticmethod
     async def get_from_term(pool: Pool, termo: str) -> List[Self]:
         async with pool.acquire() as conn:
             records = await conn.fetch(
@@ -81,9 +86,9 @@ class Pessoa:
                     stack
                 FROM t_pessoa
                 WHERE
-                    termos ILIKE $1
+                    ts @@ to_tsquery('english', $1);
                 """,
-                f"%{termo}%",
+                termo,
             )
 
             if not records:
@@ -97,13 +102,18 @@ class Pessoa:
                         nome=record["nome"],
                         apelido=record["apelido"],
                         nascimento=record["nascimento"],
-                        stack=json.loads(record["stack"]),
+                        stack=record["stack"].split(","),
                     )
                 )
             return pessoas
 
     @staticmethod
     async def get(pool: Pool, pessoa_id: str) -> Self:
+        # Checa no cache
+        if pessoa := get_pessoa_from_cache(pessoa_id):
+            return pessoa
+
+        # Consome do banco
         async with pool.acquire() as conn:
             record = await conn.fetchrow(
                 """
@@ -125,13 +135,15 @@ class Pessoa:
                 nome=record["nome"],
                 apelido=record["apelido"],
                 nascimento=record["nascimento"],
-                stack=json.loads(record["stack"]),
+                stack=record["stack"].split(","),
             )
 
     @staticmethod
     async def count(pool: Pool) -> int:
         async with pool.acquire() as conn:
-            record = await conn.fetchrow("SELECT count(1) as count FROM t_pessoa")
+            record = await conn.fetchrow(
+                "SELECT row_count as count FROM row_count WHERE table_name = 't_pessoa'"
+            )
 
             return record["count"]
 
@@ -148,14 +160,13 @@ class Pessoa:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO t_pessoa (id, nome, apelido, nascimento, stack, termos)
+                INSERT INTO t_pessoa (id, nome, apelido, nascimento, stack)
                 VALUES
-                    ($1, $2, $3, $4, $5, $6)
+                    ($1, $2, $3, $4, $5)
             """,
                 self.id,
                 self.nome,
                 self.apelido,
                 self.nascimento,
-                json.dumps(self.stack),
-                dump_terms(self.nome, self.apelido, self.stack),
+                ",".join(self.stack),
             )

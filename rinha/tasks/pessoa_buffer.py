@@ -2,7 +2,6 @@ import json
 import asyncio
 import asyncpg
 from rinha.models.pessoa import Pessoa
-from rinha.util import dump_terms
 
 inserts = set()
 
@@ -20,8 +19,7 @@ def generate_insertion_tuples():
             pessoa.nome,
             pessoa.apelido,
             pessoa.nascimento,
-            json.dumps(pessoa.stack),
-            dump_terms(pessoa.nome, pessoa.apelido, pessoa.stack),
+            ",".join(pessoa.stack),
         )
         inserts.discard(pessoa)
 
@@ -34,9 +32,9 @@ async def bulk_insert_task(pool: asyncpg.Pool):
     async with pool.acquire() as conn:
         await conn.executemany(
             """
-            INSERT INTO t_pessoa (id, nome, apelido, nascimento, stack, termos)
+            INSERT INTO t_pessoa (id, nome, apelido, nascimento, stack)
             VALUES
-                ($1, $2, $3, $4, $5, $6)
+                ($1, $2, $3, $4, $5)
         """,
             list(generate_insertion_tuples()),
         )
